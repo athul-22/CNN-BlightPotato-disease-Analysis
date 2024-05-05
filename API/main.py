@@ -1,20 +1,34 @@
-from PIL import Image
-from fastapi import FastAPI, File, UploadFile
-import numpy as np
-import uvicorn
-from io import BytesIO
-import tensorflow as tf
-from tensorflow.keras.models import load_model
 
+
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+import numpy as np
+from io import BytesIO
+from PIL import Image
+import tensorflow as tf
 
 app = FastAPI()
 
-# Assuming `MODEL` is your loaded Keras model
-MODEL = load_model("/Users/athulnambiar/Desktop/PROJECTS/POTATO DISEASE/model/model_2.keras")
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+MODEL = tf.keras.models.load_model("/Users/athulnambiar/Desktop/PROJECTS/POTATO DISEASE/model/model_2.keras")
+
+CLASS_NAMES = ["Early Blight", "Late Blight", "Healthy"]
 
 @app.get("/ping")
 async def ping():
-    return "Hello, I am alive!"
+    return "Hello, I am alive"
 
 def read_file_as_image(data) -> np.ndarray:
     image = np.array(Image.open(BytesIO(data)))
@@ -25,16 +39,16 @@ async def predict(
     file: UploadFile = File(...)
 ):
     image = read_file_as_image(await file.read())
+    img_batch = np.expand_dims(image, 0)
     
-    # Preprocess the image if necessary (e.g., resizing, normalization)
-    # Example: image = preprocess_image(image)
-    
-    # Make predictions using the loaded model
-    predictions = MODEL.predict(np.expand_dims(image, axis=0))
-    
-    # Process predictions and return results
-    # Example: return {"class": "healthy" if predictions[0] < 0.5 else "blight", "confidence": predictions[0]}
-    return {"predictions": predictions.tolist()}  # Return predictions as a list for easier JSON serialization
+    predictions = MODEL.predict(img_batch)
+
+    predicted_class = CLASS_NAMES[np.argmax(predictions[0])]
+    confidence = np.max(predictions[0])
+    return {
+        'class': predicted_class,
+        'confidence': float(confidence)
+    }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run(app, host='localhost', port=8000)
